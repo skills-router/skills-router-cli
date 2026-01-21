@@ -38,16 +38,31 @@ export const searchCommand = new Command('search')
       );
 
       const data = response.data;
-      spinner.succeed(`Found ${data.total} skill(s)`);
 
-      if (data.results.length === 0) {
+      // Check if response has expected structure
+      if (!data || typeof data !== 'object') {
+        spinner.fail('Invalid API response');
+        console.error(chalk.red('\nThe API returned an invalid response format.'));
+        process.exit(1);
+      }
+
+      const total = data.total || 0;
+      const results = data.results || [];
+      const page = data.page || 1;
+      const pageSize = data.pageSize || 12;
+
+      spinner.succeed(`Found ${total} skill(s)`);
+
+      if (results.length === 0) {
         console.log(chalk.yellow('\nNo skills found matching your search.'));
+        console.log(chalk.gray('\nNote: The search API is currently under development.'));
+        console.log(chalk.gray('Please use the "add" command directly with GitHub URLs.'));
         return;
       }
 
       console.log(`\n${chalk.bold('Search Results:')} ${keyword}\n`);
 
-      data.results.forEach((skill, index) => {
+      results.forEach((skill, index) => {
         console.log(`${chalk.cyan(`${index + 1}. ${skill.name}`)}`);
         console.log(`   ${skill.description}`);
         console.log(`   ${chalk.gray(`Repository: ${skill.repository}`)}`);
@@ -55,15 +70,18 @@ export const searchCommand = new Command('search')
         console.log();
       });
 
-      console.log(chalk.gray(`Page ${data.page} of ${Math.ceil(data.total / data.pageSize)}`));
+      console.log(chalk.gray(`Page ${page} of ${Math.ceil(total / pageSize)}`));
 
     } catch (error: any) {
       spinner.fail('Search failed');
 
       if (error.response) {
         console.error(chalk.red(`\nAPI Error: ${error.response.status} - ${error.response.statusText}`));
+        console.error(chalk.gray('\nNote: The search API is currently under development.'));
+        console.error(chalk.gray('Please use the "add" command directly with GitHub URLs.'));
       } else if (error.request) {
         console.error(chalk.red('\nNetwork error: Could not reach the API'));
+        console.error(chalk.gray('\nNote: The search API is currently under development.'));
       } else {
         console.error(chalk.red(`\nError: ${error.message}`));
       }
