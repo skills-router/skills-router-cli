@@ -1,5 +1,4 @@
 import { Command } from 'commander';
-import axios from 'axios';
 import chalk from 'chalk';
 import ora from 'ora';
 
@@ -7,16 +6,23 @@ interface SearchResult {
   id: string;
   name: string;
   description: string;
-  repository: string;
-  author: string;
-  stars: number;
+  category: string | null;
+  repo: string;
+  path: string;
+  version: string | null;
+  star: number;
+  fork: number;
+  updateAt: string;
 }
 
 interface SearchResponse {
-  results: SearchResult[];
-  total: number;
-  page: number;
-  pageSize: number;
+  data: SearchResult[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: string;
+    totalPages: number;
+  };
 }
 
 export const searchCommand = new Command('search')
@@ -26,18 +32,21 @@ export const searchCommand = new Command('search')
     const spinner = ora('Searching skills...').start();
 
     try {
-      const response = await axios.get<SearchResponse>(
-        'https://www.skills-router.com/api/skills',
-        {
-          params: {
-            page: 1,
-            pageSize: 12,
-            filter: keyword,
-          },
-        }
-      );
+      // Build URL with query parameters directly
+      const url = `https://www.skills-router.com/api/skills?q=${encodeURIComponent(keyword)}&page=1&limit=12`;
 
-      const data = response.data;
+      // Use fetch instead of axios for better compatibility
+      const response = await fetch(url, {
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = (await response.json()) as SearchResponse;
 
       // Check if response has expected structure
       if (!data || typeof data !== 'object') {
@@ -46,42 +55,41 @@ export const searchCommand = new Command('search')
         process.exit(1);
       }
 
-      const total = data.total || 0;
-      const results = data.results || [];
-      const page = data.page || 1;
-      const pageSize = data.pageSize || 12;
+      const total = parseInt(data.pagination?.total || '0', 10);
+      const results = data.data || [];
+      const page = data.pagination?.page || 1;
+      const limit = data.pagination?.limit || 12;
+      const totalPages = data.pagination?.totalPages || 1;
 
       spinner.succeed(`Found ${total} skill(s)`);
 
       if (results.length === 0) {
         console.log(chalk.yellow('\nNo skills found matching your search.'));
-        console.log(chalk.gray('\nNote: The search API is currently under development.'));
-        console.log(chalk.gray('Please use the "add" command directly with GitHub URLs.'));
         return;
       }
 
       console.log(`\n${chalk.bold('Search Results:')} ${keyword}\n`);
 
-      results.forEach((skill, index) => {
+      results.forEach((skill: SearchResult, index: number) => {
         console.log(`${chalk.cyan(`${index + 1}. ${skill.name}`)}`);
         console.log(`   ${skill.description}`);
-        console.log(`   ${chalk.gray(`Repository: ${skill.repository}`)}`);
-        console.log(`   ${chalk.gray(`Author: ${skill.author} | ⭐ ${skill.stars}`)}`);
+        console.log(`   ${chalk.gray(`Repository: ${skill.repo}`)}`);
+        console.log(`   ${chalk.gray(`Stars: ${skill.star} | Forks: ${skill.fork}`)}`);
+        if (skill.version) {
+          console.log(`   ${chalk.gray(`Version: ${skill.version}`)}`);
+        }
         console.log();
       });
 
-      console.log(chalk.gray(`Page ${page} of ${Math.ceil(total / pageSize)}`));
+      console.log(chalk.gray(`Page ${page} of ${totalPages} (Total: ${total} skills)`));
 
     } catch (error: any) {
       spinner.fail('Search failed');
 
       if (error.response) {
         console.error(chalk.red(`\nAPI Error: ${error.response.status} - ${error.response.statusText}`));
-        console.error(chalk.gray('\nNote: The search API is currently under development.'));
-        console.error(chalk.gray('Please use the "add" command directly with GitHub URLs.'));
       } else if (error.request) {
         console.error(chalk.red('\nNetwork error: Could not reach the API'));
-        console.error(chalk.gray('\nNote: The search API is currently under development.'));
       } else {
         console.error(chalk.red(`\nError: ${error.message}`));
       }
